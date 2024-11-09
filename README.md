@@ -17,16 +17,17 @@ Immich has trouble handling image files that do not include the correct date and
 ## Usage
 
 ```bash
-./photo_timestamp_fix.sh srcfolder destfolder
+./photo_timestamp_fix.sh srcfolder destfolder [ -l logfile ]
 ```
 
 - `srcfolder`: The source directory containing the image files to be processed.
 - `destfolder`: The destination directory where the processed image files will be copied.
+- `logfile`: Specify the name of a logfile, where the conversion report shall be stored.
 
 ### Example
 
 ```bash
-./photo_timestamp_fix.sh /path/to/source /path/to/destination
+./photo_timestamp_fix.sh /path/to/source /path/to/destination [ -l logfile ]
 ```
 
 This command will:
