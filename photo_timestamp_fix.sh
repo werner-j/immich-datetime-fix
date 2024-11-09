@@ -143,30 +143,31 @@ process_file() {
   datetime=""
   used_tag="original"
   if [ -z "$tag_names" ]; then
+    ((files_without_tags++))
     inode_change_date=$(exiftool -s3 -GPSDateTime "$file" 2>/dev/null)
     used_tag="GPSDateTime"
-    if [ -n "$inode_change_date" ]; then
+    if [ -z "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -ModifyDate "$file" 2>/dev/null)
       used_tag="ModifyDate"
     fi
-    if [ -n "$inode_change_date" ]; then
+    if [ -z "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -SubSecModifyDate "$file" 2>/dev/null)
       used_tag="SubSecModifyDate"
     fi
-    if [ -n "$inode_change_date" ]; then
+    if [ -z "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -GPSDateStamp "$file" 2>/dev/null)
       used_tag="GPSDateStamp"
     fi
-    if [ -n "$inode_change_date" ]; then
-      inode_change_date=$(exiftool -s3 -FileInodeChangeDate "$file" 2>/dev/null)
-      used_tag="FileInodeChangeDate"
+    if [ -z "$inode_change_date" ]; then
+      inode_change_date=$(exiftool -s3 -FileModifyDate "$file" 2>/dev/null)
+      used_tag="FileModifyDate"
     fi
 
     if [ -n "$inode_change_date" ]; then
-      ((files_without_tags++))
       tag_status="Tag added"
       datetime="$inode_change_date"
     else
+      tag_status="ERROR & fallback"
       datetime="1970-01-01 00:00:01"
     fi
   else
