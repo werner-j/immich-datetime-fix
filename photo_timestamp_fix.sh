@@ -15,13 +15,15 @@ main() {
 parse_arguments() {
   exclude_patterns=()
   if [ "$#" -lt 2 ]; then
-    echo -e "\e[31mUsage: $0 srcfolder destfolder [-l logfile.log] [-e exclude_pattern]...\e[0m"
+    echo -e "\e[31mUsage: $0 srcfolder destfolder [-l logfile.log] [-e exclude_pattern]... \e[0m"
     echo -e "\e[33mParameters:\e[0m"
     echo -e "  srcfolder          Source directory containing files to process."
     echo -e "  destfolder         Destination directory for processed files."
     echo -e "\e[33mOptions:\e[0m"
     echo -e "  -l logfile.log     Specify a log file to store processing information."
     echo -e "  -e exclude_pattern Exclude files or directories that match the pattern (can be used multiple times)."
+    echo -e "\e[33mVariables:\e[0m"
+    echo -e "  FIND_OPTS          Specify additional options for the find command (e.g., size limits, excluding specific directories) over the command line variable FIND_OPTS."
     exit 1
   fi
 
@@ -30,7 +32,7 @@ parse_arguments() {
   logfile=""
 
   shift 2
-  while getopts "l:e:" opt; do
+  while getopts "l:e:o:" opt; do
     case $opt in
       e)
         exclude_patterns+=($OPTARG)
@@ -69,13 +71,19 @@ initialize_statistics() {
   # Build exclude pattern arguments for find command
   exclude_args=()
   for pattern in "${exclude_patterns[@]}"; do
-    exclude_args+=(-not -iname "*$pattern*")
+    exclude_args+=" -not -ipath \"*$pattern*\" "
   done
 
   files_with_tags=0
   files_without_tags=0
-  total_files=$(find "$srcfolder" -type d \( -iname "@eaDir" -o -iname "*thumb*" -o -iname "*thumbnail*" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.heic" -o -iname "*.mov" -o -iname "*.mp4" -o -iname "*.m4v" -o -iname "*.cr2" -o -iname "*.arw" -o -iname "*.dng" -o -iname "*.tif" -o -iname "*.png" -o -iname "*.mts" \) ! -iname ".*" "${exclude_args[@]}" -print | wc -l)
-  file_search_command="find \"$srcfolder\" -type d \( -iname \"@eaDir\" -o -iname \"*thumb*\" -o -iname \"*thumbnail*\" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.heic" -o -iname "*.mov" -o -iname "*.mp4" -o -iname "*.m4v" -o -iname "*.cr2" -o -iname "*.arw" -o -iname "*.dng" -o -iname "*.tif" -o -iname "*.png" -o -iname "*.mts" \) ! -iname \".*\" \"${exclude_args[@]}\" -print"
+  find_command="find \"$srcfolder\" $FIND_OPTS -type f ${exclude_args[@]} -print"
+  if [ -n "$logfile" ]; then
+    echo "Find command used for discovering files: $find_command" >> "$logfile"
+  fi
+  total_files=$(eval $find_command | wc -l)
+  if [ -n "$logfile" ]; then
+    echo "Total files found: $total_files" >> "$logfile"
+  fi
   current_file=0
   declare -gA tag_usage
   declare -gA filetype_count
@@ -110,7 +118,6 @@ show_progress() {
 
   # Multi-column layout for statistics
   echo -e "${box_color}----------------------------------------------------${reset_color}"
-  echo -e "${text_color}${file_search_command}${reset_color}"
   echo -e "${header_color}Statistics:${reset_color}"
   echo -e "${text_color}Files with tags     : $files_with_tags${reset_color}"
   echo -e "${text_color}Files without tags  : $files_without_tags${reset_color}"
@@ -148,15 +155,21 @@ start_processing() {
   # Build exclude pattern arguments for find command
   exclude_args=()
   for pattern in "${exclude_patterns[@]}"; do
-    exclude_args+=(-not -iname "*$pattern*")
+    exclude_args+=" -not -ipath \"*$pattern*\" "
   done
+
+  find_command="find \"$srcfolder\" $FIND_OPTS -type f ! -iname ".*" ${exclude_args[@]} -print"
+  if [ -n "$logfile" ]; then
+    echo "Find command used for discovering files: $find_command" >> "$logfile"
+  fi
+  total_files=$(eval $find_command | wc -l)
 
   while IFS= read -r file; do
     ((current_file++))
 
     process_file "$file"
     show_progress
-  done < <(find "$srcfolder" -type d \( -iname "@eaDir" -o -iname "*thumb*" -o -iname "*thumbnail*" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.heic" -o -iname "*.mov" -o -iname "*.mp4" -o -iname "*.m4v" -o -iname "*.cr2" -o -iname "*.arw" -o -iname "*.dng" -o -iname "*.tif" -o -iname "*.png" -o -iname "*.mts" \) ! -iname ".*" "${exclude_args[@]}" -print)
+  done < <(eval $find_command)
 }
 
 
@@ -174,21 +187,21 @@ process_file() {
   if [ -z "$tag_names" ]; then
     inode_change_date=$(exiftool -s3 -GPSDateTime "$file" 2>/dev/null)
     used_tag="GPSDateTime"
-    if [ -z "$inode_change_date" ]; then
+    if [ -n "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -ModifyDate "$file" 2>/dev/null)
       used_tag="ModifyDate"
     fi
-    if [ -z "$inode_change_date" ]; then
+    if [ -n "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -SubSecModifyDate "$file" 2>/dev/null)
       used_tag="SubSecModifyDate"
     fi
-    if [ -z "$inode_change_date" ]; then
+    if [ -n "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -GPSDateStamp "$file" 2>/dev/null)
       used_tag="GPSDateStamp"
     fi
-    if [ -z "$inode_change_date" ]; then
-      inode_change_date=$(exiftool -s3 -FileModifyDate "$file" 2>/dev/null)
-      used_tag="FileModifyDate"
+    if [ -n "$inode_change_date" ]; then
+      inode_change_date=$(exiftool -s3 -FileInodeChangeDate "$file" 2>/dev/null)
+      used_tag="FileInodeChangeDate"
     fi
 
     if [ -n "$inode_change_date" ]; then
@@ -196,7 +209,6 @@ process_file() {
       tag_status="Tag added"
       datetime="$inode_change_date"
     else
-      used_tag="NONE"
       datetime="1970-01-01 00:00:01"
     fi
   else
