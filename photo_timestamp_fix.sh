@@ -13,8 +13,15 @@ main() {
 }
 
 parse_arguments() {
+  exclude_patterns=()
   if [ "$#" -lt 2 ]; then
-    echo -e "\e[31mUsage: $0 srcfolder destfolder [-l logfile.log]\e[0m"
+    echo -e "\e[31mUsage: $0 srcfolder destfolder [-l logfile.log] [-e exclude_pattern]...\e[0m"
+    echo -e "\e[33mParameters:\e[0m"
+    echo -e "  srcfolder          Source directory containing files to process."
+    echo -e "  destfolder         Destination directory for processed files."
+    echo -e "\e[33mOptions:\e[0m"
+    echo -e "  -l logfile.log     Specify a log file to store processing information."
+    echo -e "  -e exclude_pattern Exclude files or directories that match the pattern (can be used multiple times)."
     exit 1
   fi
 
@@ -23,8 +30,11 @@ parse_arguments() {
   logfile=""
 
   shift 2
-  while getopts "l:" opt; do
+  while getopts "l:e:" opt; do
     case $opt in
+      e)
+        exclude_patterns+=($OPTARG)
+        ;;
       l)
         logfile=$OPTARG
         ;;
@@ -45,6 +55,9 @@ init_log() {
 }
 
 check_folders() {
+  # Create subdirectories for processed files
+  mkdir -p "$destfolder/with_tags"
+  mkdir -p "$destfolder/without_tags"
   if [ ! -d "$srcfolder" ]; then
     echo -e "\e[31mSource folder does not exist\e[0m"
     exit 1
@@ -53,9 +66,15 @@ check_folders() {
 }
 
 initialize_statistics() {
+  # Build exclude pattern arguments for find command
+  exclude_args=()
+  for pattern in "${exclude_patterns[@]}"; do
+    exclude_args+=(-not -iname "*$pattern*")
+  done
+
   files_with_tags=0
   files_without_tags=0
-  total_files=$(find "$srcfolder" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.heic" -o -iname "*.mov" -o -iname "*.mp4" -o -iname "*.m4v" -o -iname "*.cr2" -o -iname "*.arw" -o -iname "*.dng" -o -iname "*.tif" -o -iname "*.png" -o -iname "*.mts" \) | wc -l)
+  total_files=$(find "$srcfolder" -type d \( -iname "@eaDir" -o -iname "*thumb*" -o -iname "*thumbnail*" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.mp4" -o -iname "*.mov" -o -iname "*.avi" -o -iname "*.mkv" \) "${exclude_args[@]}" -print | wc -l)
   current_file=0
   declare -gA tag_usage
   declare -gA filetype_count
@@ -70,6 +89,7 @@ initialize_statistics() {
   header_color="\e[32m"
   reset_color="\e[0m"
 }
+
 
 frame() {
   clear
@@ -123,13 +143,20 @@ show_progress() {
 }
 
 start_processing() {
+  # Build exclude pattern arguments for find command
+  exclude_args=()
+  for pattern in "${exclude_patterns[@]}"; do
+    exclude_args+=(-not -iname "*$pattern*")
+  done
+
   while IFS= read -r file; do
     ((current_file++))
 
     process_file "$file"
     show_progress
-done < <(find "$srcfolder" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.heic" -o -iname "*.mov" -o -iname "*.mp4" -o -iname "*.m4v" -o -iname "*.cr2" -o -iname "*.arw" -o -iname "*.dng" -o -iname "*.tif" -o -iname "*.png" -o -iname "*.mts" \) )
+  done < <(find "$srcfolder" -type d \( -iname "@eaDir" -o -iname "*thumb*" -o -iname "*thumbnail*" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.mp4" -o -iname "*.mov" -o -iname "*.avi" -o -iname "*.mkv" \) ! -iname ".*" "${exclude_args[@]}" -print)
 }
+
 
 process_file() {
   local file=$1
@@ -143,31 +170,30 @@ process_file() {
   datetime=""
   used_tag="original"
   if [ -z "$tag_names" ]; then
-    ((files_without_tags++))
     inode_change_date=$(exiftool -s3 -GPSDateTime "$file" 2>/dev/null)
     used_tag="GPSDateTime"
-    if [ -z "$inode_change_date" ]; then
+    if [ -n "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -ModifyDate "$file" 2>/dev/null)
       used_tag="ModifyDate"
     fi
-    if [ -z "$inode_change_date" ]; then
+    if [ -n "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -SubSecModifyDate "$file" 2>/dev/null)
       used_tag="SubSecModifyDate"
     fi
-    if [ -z "$inode_change_date" ]; then
+    if [ -n "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -GPSDateStamp "$file" 2>/dev/null)
       used_tag="GPSDateStamp"
     fi
-    if [ -z "$inode_change_date" ]; then
-      inode_change_date=$(exiftool -s3 -FileModifyDate "$file" 2>/dev/null)
-      used_tag="FileModifyDate"
+    if [ -n "$inode_change_date" ]; then
+      inode_change_date=$(exiftool -s3 -FileInodeChangeDate "$file" 2>/dev/null)
+      used_tag="FileInodeChangeDate"
     fi
 
     if [ -n "$inode_change_date" ]; then
+      ((files_without_tags++))
       tag_status="Tag added"
       datetime="$inode_change_date"
     else
-      tag_status="ERROR & fallback"
       datetime="1970-01-01 00:00:01"
     fi
   else
@@ -184,11 +210,15 @@ process_file() {
   formatted_datetime=$(echo "$datetime" | sed 's/ /_/g' | sed 's/:/-/g' | sed 's/_/:/3')
   millis=$(date +%s%3N)
   new_filename="${formatted_datetime}.${millis}.${extension}"
+  dest_subfolder="$destfolder/with_tags"
+  if [ "$tag_status" == "Tag added" ]; then
+    dest_subfolder="$destfolder/without_tags"
+  fi
 
-  cp "$file" "$destfolder/$new_filename"
+  cp "$file" "$dest_subfolder/$new_filename"
 
   if [ "$tag_status" == "Tag added" ]; then
-    exiftool -overwrite_original -SubSecCreateDate="$datetime" -P "$destfolder/$new_filename"
+    exiftool -overwrite_original -SubSecCreateDate="$datetime" -P "$dest_subfolder/$new_filename"
   fi
 
   output_line="$(date '+%b %d %H:%M:%S') INFO: $file -> $new_filename, EXIF DateTime: $datetime, Status: $tag_status, Used Tag: $used_tag"
