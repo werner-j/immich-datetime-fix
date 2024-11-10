@@ -44,7 +44,7 @@ This command will:
 ## Notes
 
 - The script only processes files that are missing specific date metadata tags (`SubSecDateTimeOriginal`, `DateTimeOriginal`, `CreateDate`, etc.). If a file already has these tags, it will not modify the EXIF data.
-- The `DateTimeCreated` tag is added to the copied version of the image in the `destfolder`, leaving the original file untouched.
+- The `SubSecCreateDate` tag is added to the copied version of the image in the `destfolder`, leaving the original file untouched.
 - The output will show each processed file in the format: `original filename -> new filename`, along with EXIF date information.
 
 ## License
