@@ -74,7 +74,8 @@ initialize_statistics() {
 
   files_with_tags=0
   files_without_tags=0
-  total_files=$(find "$srcfolder" -type d \( -iname "@eaDir" -o -iname "*thumb*" -o -iname "*thumbnail*" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.mp4" -o -iname "*.mov" -o -iname "*.avi" -o -iname "*.mkv" \) "${exclude_args[@]}" -print | wc -l)
+  total_files=$(find "$srcfolder" -type d \( -iname "@eaDir" -o -iname "*thumb*" -o -iname "*thumbnail*" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.heic" -o -iname "*.mov" -o -iname "*.mp4" -o -iname "*.m4v" -o -iname "*.cr2" -o -iname "*.arw" -o -iname "*.dng" -o -iname "*.tif" -o -iname "*.png" -o -iname "*.mts" \) ! -iname ".*" "${exclude_args[@]}" -print | wc -l)
+  file_search_command="find \"$srcfolder\" -type d \( -iname \"@eaDir\" -o -iname \"*thumb*\" -o -iname \"*thumbnail*\" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.heic" -o -iname "*.mov" -o -iname "*.mp4" -o -iname "*.m4v" -o -iname "*.cr2" -o -iname "*.arw" -o -iname "*.dng" -o -iname "*.tif" -o -iname "*.png" -o -iname "*.mts" \) ! -iname \".*\" \"${exclude_args[@]}\" -print"
   current_file=0
   declare -gA tag_usage
   declare -gA filetype_count
@@ -109,6 +110,7 @@ show_progress() {
 
   # Multi-column layout for statistics
   echo -e "${box_color}----------------------------------------------------${reset_color}"
+  echo -e "${text_color}${file_search_command}${reset_color}"
   echo -e "${header_color}Statistics:${reset_color}"
   echo -e "${text_color}Files with tags     : $files_with_tags${reset_color}"
   echo -e "${text_color}Files without tags  : $files_without_tags${reset_color}"
@@ -154,7 +156,7 @@ start_processing() {
 
     process_file "$file"
     show_progress
-  done < <(find "$srcfolder" -type d \( -iname "@eaDir" -o -iname "*thumb*" -o -iname "*thumbnail*" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.mp4" -o -iname "*.mov" -o -iname "*.avi" -o -iname "*.mkv" \) ! -iname ".*" "${exclude_args[@]}" -print)
+  done < <(find "$srcfolder" -type d \( -iname "@eaDir" -o -iname "*thumb*" -o -iname "*thumbnail*" \) -prune -o -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.heic" -o -iname "*.mov" -o -iname "*.mp4" -o -iname "*.m4v" -o -iname "*.cr2" -o -iname "*.arw" -o -iname "*.dng" -o -iname "*.tif" -o -iname "*.png" -o -iname "*.mts" \) ! -iname ".*" "${exclude_args[@]}" -print)
 }
 
 
@@ -172,21 +174,21 @@ process_file() {
   if [ -z "$tag_names" ]; then
     inode_change_date=$(exiftool -s3 -GPSDateTime "$file" 2>/dev/null)
     used_tag="GPSDateTime"
-    if [ -n "$inode_change_date" ]; then
+    if [ -z "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -ModifyDate "$file" 2>/dev/null)
       used_tag="ModifyDate"
     fi
-    if [ -n "$inode_change_date" ]; then
+    if [ -z "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -SubSecModifyDate "$file" 2>/dev/null)
       used_tag="SubSecModifyDate"
     fi
-    if [ -n "$inode_change_date" ]; then
+    if [ -z "$inode_change_date" ]; then
       inode_change_date=$(exiftool -s3 -GPSDateStamp "$file" 2>/dev/null)
       used_tag="GPSDateStamp"
     fi
-    if [ -n "$inode_change_date" ]; then
-      inode_change_date=$(exiftool -s3 -FileInodeChangeDate "$file" 2>/dev/null)
-      used_tag="FileInodeChangeDate"
+    if [ -z "$inode_change_date" ]; then
+      inode_change_date=$(exiftool -s3 -FileModifyDate "$file" 2>/dev/null)
+      used_tag="FileModifyDate"
     fi
 
     if [ -n "$inode_change_date" ]; then
@@ -194,6 +196,7 @@ process_file() {
       tag_status="Tag added"
       datetime="$inode_change_date"
     else
+      used_tag="NONE"
       datetime="1970-01-01 00:00:01"
     fi
   else
