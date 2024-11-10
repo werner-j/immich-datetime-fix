@@ -17,17 +17,18 @@ Immich has trouble handling image files that do not include the correct date and
 ## Usage
 
 ```bash
-./photo_timestamp_fix.sh srcfolder destfolder [ -l logfile ]
+./photo_timestamp_fix.sh srcfolder destfolder [ -l logfile ] [ -e exclude ]
 ```
 
 - `srcfolder`: The source directory containing the image files to be processed.
 - `destfolder`: The destination directory where the processed image files will be copied.
 - `logfile`: Specify the name of a logfile, where the conversion report shall be stored.
+- `exclude`: Exclude a specific pattern (case insensitive), can be used multiple times.
 
 ### Example
 
 ```bash
-./photo_timestamp_fix.sh /path/to/source /path/to/destination [ -l logfile ]
+./photo_timestamp_fix.sh /path/to/source /path/to/destination  -l datefix.log -e thumbnail -e eaDir
 ```
 
 This command will:
