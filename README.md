@@ -17,7 +17,7 @@ Immich has trouble handling image files that do not include the correct date and
 ## Usage
 
 ```bash
-./photo_timestamp_fix.sh srcfolder destfolder [ -l logfile ] [ -e exclude ]
+./photo_timestamp_fix.sh srcfolder destfolder [ -l logfile ] [ -e exclude ]...
 ```
 
 - `srcfolder`: The source directory containing the image files to be processed.
@@ -34,8 +34,10 @@ FIND_OPTS="-iregex '.*\.\(dng\|jpg\|arw\|cr2\|png\|mov\|mp4\|m4v\|tif\)$'"
 
 This command will:
 - Search the `srcfolder` directory and all subdirectories for files.
-- Use `exiftool` to check for existing date tags. If none are found, it will use the inode change date (`FileInodeChangeDate`) to create a `DateTimeCreated` tag.
+- Logs all information to datefix.log file.
+- Use `exiftool` to check for existing date tags. If none are found, it will use some other possibly available tag and create a tag for immich.
 - Copy each file to the `destfolder` with the new name format `YYYY-MM-DD_HH:mm:ss.millis.ext`.
+- Uses the FIND_OPTS variable's content for searching for files in the sourcefolder. In this case it looks for most common photo and movie format. The search is not case-sensitive.
 
 ## Dependencies
 
