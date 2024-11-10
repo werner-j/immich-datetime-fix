@@ -28,7 +28,8 @@ Immich has trouble handling image files that do not include the correct date and
 ### Example
 
 ```bash
-./photo_timestamp_fix.sh /path/to/source /path/to/destination  -l datefix.log -e thumbnail -e eaDir
+FIND_OPTS="-iregex '.*\.\(dng\|jpg\|arw\|cr2\|png\|mov\|mp4\|m4v\|tif\)$'"
+./photo_timestamp_fix.sh /path/to/source /path/to/destination  -l datefix.log -e thumbnail -e eaDir -e preview
 ```
 
 This command will:
