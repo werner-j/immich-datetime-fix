@@ -1,6 +1,6 @@
 # Photo Timestamp Fix Script
 
-This repository contains a Bash script designed to help prepare media files for importing into the [Immich](https://github.com/alextran1502/immich) photo management app. The script addresses issues where image files do not have proper EXIF date and time information, which can prevent Immich from importing them correctly. This workaround uses the file's inode change date to populate the missing EXIF tags and ensures that every image has an appropriate timestamp.
+This repository contains a Bash script designed to help prepare media files for importing into the [Immich](https://github.com/alextran1502/immich) photo management app using exiftool. The script addresses issues where image files do not have proper EXIF date and time information, which can prevent Immich from importing them correctly. This workaround uses the file's inode change date to populate the missing EXIF tags and ensures that every image has an appropriate timestamp.
 
 ## Features
 
