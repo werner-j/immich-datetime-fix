@@ -209,6 +209,7 @@ process_file() {
       tag_status="Tag added"
       datetime="$inode_change_date"
     else
+      tag_status="Tag added"
       datetime="1970-01-01 00:00:01"
     fi
   else
@@ -236,7 +237,7 @@ process_file() {
     exiftool -overwrite_original -SubSecCreateDate="$datetime" -P "$dest_subfolder/$new_filename"
   fi
 
-  output_line="$(date '+%b %d %H:%M:%S') INFO: $file -> $new_filename, EXIF DateTime: $datetime, Status: $tag_status, Used Tag: $used_tag"
+  output_line="$(date '+%b %d %H:%M:%S') INFO: $file -> $dest_subfolder/$new_filename, EXIF DateTime: $datetime, Status: $tag_status, Used Tag: $used_tag"
   echo "$output_line" >> "$tmpfile"
   if [ -n "$logfile" ]; then
     echo "$output_line" >> "$logfile"
