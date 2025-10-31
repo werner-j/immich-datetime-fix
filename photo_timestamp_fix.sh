@@ -116,6 +116,11 @@ initialize_statistics() {
   tmpfile=$(mktemp)
   trap "rm -f $tmpfile" EXIT
 
+  # Progress update optimization: only update UI every N files or every N seconds
+  # This reduces overhead from clearing and redrawing the screen
+  progress_update_interval=5  # Update every 5 files
+  last_progress_update=0
+
   # Colors for UI
   title_color="\e[33m"
   text_color="\e[37m"
@@ -190,12 +195,23 @@ start_processing() {
   fi
   total_files=$(eval $find_command | wc -l)
 
+  # Show initial progress
+  show_progress
+
   while IFS= read -r file; do
     ((current_file++))
 
     process_file "$file"
-    show_progress
+    
+    # OPTIMIZATION: Update progress display only periodically to reduce overhead
+    # This avoids excessive screen clearing and redrawing
+    if [ $((current_file % progress_update_interval)) -eq 0 ] || [ $current_file -eq $total_files ]; then
+      show_progress
+    fi
   done < <(eval $find_command)
+  
+  # Ensure final progress is shown
+  show_progress
 }
 
 
