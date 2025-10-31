@@ -58,7 +58,7 @@ parse_arguments() {
   logfile=""
 
   shift 2
-  while getopts "l:e:o:" opt; do
+  while getopts "l:e:" opt; do
     case $opt in
       e)
         exclude_patterns+=($OPTARG)
@@ -116,10 +116,9 @@ initialize_statistics() {
   tmpfile=$(mktemp)
   trap "rm -f $tmpfile" EXIT
 
-  # Progress update optimization: only update UI every N files or every N seconds
+  # Progress update optimization: only update UI every N files
   # This reduces overhead from clearing and redrawing the screen
   progress_update_interval=5  # Update every 5 files
-  last_progress_update=0
 
   # Colors for UI
   title_color="\e[33m"
@@ -274,12 +273,12 @@ process_file() {
       used_tag="FileModifyDate"
     fi
 
-    if [ -n "$datetime" ]; then
-      ((files_without_tags++))
-      tag_status="Tag added"
-    else
-      ((files_without_tags++))
-      tag_status="Tag added"
+    # All files without primary tags get counted here
+    ((files_without_tags++))
+    tag_status="Tag added"
+    
+    # If no datetime found at all, use fallback
+    if [ -z "$datetime" ]; then
       datetime="1970-01-01 00:00:01"
       used_tag="fallback"
     fi
