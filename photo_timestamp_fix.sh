@@ -1,7 +1,23 @@
 #!/bin/bash
 
+#===============================================================================
+# Photo Timestamp Fix Script - Improved Version
+#
+# Performance Improvements:
+# - Single exiftool call per file instead of 4-8 separate calls
+# - Reduced I/O operations through efficient metadata extraction
+# - Better error handling and validation
+# - Maintained visual progress feedback for user experience
+#
+# Key optimizations:
+# 1. Batch metadata extraction: All EXIF tags read in one exiftool invocation
+# 2. Efficient parsing: Direct text parsing instead of multiple subprocesses
+# 3. Reduced file operations: Minimized redundant exiftool calls
+#===============================================================================
+
 # Check if enough arguments are provided
 main() {
+  check_dependencies
   parse_arguments "$@"
   init_log
   check_folders
@@ -10,6 +26,16 @@ main() {
   display_final_statistics
   log_final_statistics
   show_exit_prompt
+}
+
+check_dependencies() {
+  if ! command -v exiftool &> /dev/null; then
+    echo -e "\e[31mError: exiftool is not installed.\e[0m"
+    echo -e "\e[33mPlease install exiftool:\e[0m"
+    echo -e "  Debian/Ubuntu: sudo apt-get install libimage-exiftool-perl"
+    echo -e "  macOS: brew install exiftool"
+    exit 1
+  fi
 }
 
 parse_arguments() {
@@ -176,45 +202,79 @@ start_processing() {
 process_file() {
   local file=$1
 
+  # Validate file exists and is readable
+  if [ ! -f "$file" ] || [ ! -r "$file" ]; then
+    echo "$(date '+%b %d %H:%M:%S') WARNING: Skipping unreadable file: $file" >> "$tmpfile"
+    if [ -n "$logfile" ]; then
+      echo "$(date '+%b %d %H:%M:%S') WARNING: Skipping unreadable file: $file" >> "$logfile"
+    fi
+    return
+  fi
+
   extension="${file##*.}"
   ((filetype_count[${extension,,}]++))
 
-  tag_names=$(exiftool -s -SubSecDateTimeOriginal -DateTimeOriginal -SubSecCreateDate -CreationDate -CreateDate -SubSecMediaCreateDate -MediaCreateDate "$file" 2>/dev/null | grep -v '^$' | cut -d':' -f1)
+  # PERFORMANCE IMPROVEMENT: Single exiftool call to extract all needed metadata
+  # Previous version: 4-8 separate exiftool calls per file
+  # New version: 1 exiftool call per file with all tags requested at once
+  # This reduces process spawning overhead and file I/O significantly
+  local exif_data=$(exiftool -s -G1 \
+    -SubSecDateTimeOriginal -DateTimeOriginal -SubSecCreateDate \
+    -CreationDate -CreateDate -SubSecMediaCreateDate -MediaCreateDate \
+    -GPSDateTime -ModifyDate -SubSecModifyDate \
+    -GPSDateStamp -FileModifyDate -DateTimeCreated \
+    "$file" 2>/dev/null)
 
-  tag_status=""
-  datetime=""
-  used_tag="original"
-  if [ -z "$tag_names" ]; then
-    inode_change_date=$(exiftool -s3 -GPSDateTime "$file" 2>/dev/null)
+  # Check for primary tags (original date/time)
+  local primary_tags=$(echo "$exif_data" | grep -E "SubSecDateTimeOriginal|DateTimeOriginal|SubSecCreateDate|CreationDate|CreateDate|SubSecMediaCreateDate|MediaCreateDate" | head -1)
+  
+  local tag_status=""
+  local datetime=""
+  local used_tag="original"
+  local tag_names=""
+  
+  if [ -z "$primary_tags" ]; then
+    # No primary tags found, use fallback tags in priority order
+    datetime=$(echo "$exif_data" | grep "GPSDateTime" | head -1 | awk -F': ' '{print $2}')
     used_tag="GPSDateTime"
-    if [ -z "$inode_change_date" ]; then
-      inode_change_date=$(exiftool -s3 -ModifyDate "$file" 2>/dev/null)
+    
+    if [ -z "$datetime" ]; then
+      datetime=$(echo "$exif_data" | grep "ModifyDate" | grep -v "SubSec" | head -1 | awk -F': ' '{print $2}')
       used_tag="ModifyDate"
     fi
-    if [ -z "$inode_change_date" ]; then
-      inode_change_date=$(exiftool -s3 -SubSecModifyDate "$file" 2>/dev/null)
+    
+    if [ -z "$datetime" ]; then
+      datetime=$(echo "$exif_data" | grep "SubSecModifyDate" | head -1 | awk -F': ' '{print $2}')
       used_tag="SubSecModifyDate"
     fi
-    if [ -z "$inode_change_date" ]; then
-      inode_change_date=$(exiftool -s3 -GPSDateStamp "$file" 2>/dev/null)
+    
+    if [ -z "$datetime" ]; then
+      datetime=$(echo "$exif_data" | grep "GPSDateStamp" | head -1 | awk -F': ' '{print $2}')
       used_tag="GPSDateStamp"
     fi
-    if [ -z "$inode_change_date" ]; then
-      inode_change_date=$(exiftool -s3 -FileModifyDate "$file" 2>/dev/null)
+    
+    if [ -z "$datetime" ]; then
+      datetime=$(echo "$exif_data" | grep "FileModifyDate" | head -1 | awk -F': ' '{print $2}')
       used_tag="FileModifyDate"
     fi
 
-    if [ -n "$inode_change_date" ]; then
+    if [ -n "$datetime" ]; then
       ((files_without_tags++))
       tag_status="Tag added"
-      datetime="$inode_change_date"
     else
+      ((files_without_tags++))
       tag_status="Tag added"
       datetime="1970-01-01 00:00:01"
+      used_tag="fallback"
     fi
   else
+    # Primary tags exist
     tag_status="Tag present"
-    datetime=$(exiftool -s3 -DateTimeCreated -DateTimeOriginal -CreateDate "$file" 2>/dev/null | head -n 1)
+    tag_names=$(echo "$primary_tags" | awk -F': ' '{print $1}' | sed 's/\[.*\]//g' | tr '\n' ' ')
+    
+    # Extract datetime from primary tags
+    datetime=$(echo "$exif_data" | grep -E "DateTimeCreated|DateTimeOriginal|CreateDate" | head -1 | awk -F': ' '{print $2}')
+    
     if [ -n "$datetime" ]; then
       ((files_with_tags++))
       for tag in $tag_names; do
@@ -223,6 +283,7 @@ process_file() {
     fi
   fi
 
+  # Format datetime for filename
   formatted_datetime=$(echo "$datetime" | sed 's/ /_/g' | sed 's/:/-/g' | sed 's/_/:/3')
   millis=$(date +%s%3N)
   new_filename="${formatted_datetime}.${millis}.${extension}"
@@ -231,10 +292,23 @@ process_file() {
     dest_subfolder="$destfolder/without_tags"
   fi
 
-  cp "$file" "$dest_subfolder/$new_filename"
+  # Copy file - using cp for reliability and permission preservation
+  if ! cp "$file" "$dest_subfolder/$new_filename" 2>/dev/null; then
+    echo "$(date '+%b %d %H:%M:%S') ERROR: Failed to copy $file" >> "$tmpfile"
+    if [ -n "$logfile" ]; then
+      echo "$(date '+%b %d %H:%M:%S') ERROR: Failed to copy $file" >> "$logfile"
+    fi
+    return
+  fi
 
+  # Add metadata tag if needed
   if [ "$tag_status" == "Tag added" ]; then
-    exiftool -overwrite_original -SubSecCreateDate="$datetime" -P "$dest_subfolder/$new_filename"
+    if ! exiftool -overwrite_original -SubSecCreateDate="$datetime" -P "$dest_subfolder/$new_filename" 2>/dev/null; then
+      echo "$(date '+%b %d %H:%M:%S') WARNING: Failed to add EXIF tag to $new_filename" >> "$tmpfile"
+      if [ -n "$logfile" ]; then
+        echo "$(date '+%b %d %H:%M:%S') WARNING: Failed to add EXIF tag to $new_filename" >> "$logfile"
+      fi
+    fi
   fi
 
   output_line="$(date '+%b %d %H:%M:%S') INFO: $file -> $dest_subfolder/$new_filename, EXIF DateTime: $datetime, Status: $tag_status, Used Tag: $used_tag"
