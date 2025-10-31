@@ -239,9 +239,18 @@ process_file() {
     -GPSDateTime -ModifyDate -SubSecModifyDate \
     -GPSDateStamp -FileModifyDate -DateTimeCreated \
     "$file" 2>/dev/null)
+  
+  # Check if exiftool executed successfully
+  if [ $? -ne 0 ]; then
+    echo "$(date '+%b %d %H:%M:%S') ERROR: exiftool failed on $file" >> "$tmpfile"
+    if [ -n "$logfile" ]; then
+      echo "$(date '+%b %d %H:%M:%S') ERROR: exiftool failed on $file" >> "$logfile"
+    fi
+    return
+  fi
 
   # Check for primary tags (original date/time)
-  local primary_tags=$(echo "$exif_data" | grep -E "SubSecDateTimeOriginal|DateTimeOriginal|SubSecCreateDate|CreationDate|CreateDate|SubSecMediaCreateDate|MediaCreateDate" | head -1)
+  local primary_tags=$(echo "$exif_data" | grep -E "SubSecDateTimeOriginal|DateTimeOriginal|SubSecCreateDate|CreationDate|CreateDate|SubSecMediaCreateDate|MediaCreateDate")
   
   local tag_status=""
   local datetime=""
@@ -285,15 +294,23 @@ process_file() {
   else
     # Primary tags exist
     tag_status="Tag present"
-    tag_names=$(echo "$primary_tags" | awk -F': ' '{print $1}' | sed 's/\[.*\]//g' | tr '\n' ' ')
+    tag_names=$(echo "$primary_tags" | awk -F': ' '{print $1}' | sed 's/\[.*\]//g' | tr '\n' ' ' | xargs)
     
-    # Extract datetime from primary tags
-    datetime=$(echo "$exif_data" | grep -E "DateTimeCreated|DateTimeOriginal|CreateDate" | head -1 | awk -F': ' '{print $2}')
+    # Extract datetime from primary tags (including subsecond variants)
+    # Priority: SubSec* variants first, then regular variants
+    datetime=$(echo "$exif_data" | grep -E "SubSecDateTimeOriginal|SubSecCreateDate" | head -1 | awk -F': ' '{print $2}')
     
-    if [ -n "$datetime" ]; then
+    if [ -z "$datetime" ]; then
+      datetime=$(echo "$exif_data" | grep -E "DateTimeCreated|DateTimeOriginal|CreateDate" | head -1 | awk -F': ' '{print $2}')
+    fi
+    
+    if [ -n "$datetime" ] && [ -n "$tag_names" ]; then
       ((files_with_tags++))
+      # Only count non-empty tag names
       for tag in $tag_names; do
-        ((tag_usage[$tag]++))
+        if [ -n "$tag" ]; then
+          ((tag_usage[$tag]++))
+        fi
       done
     fi
   fi
